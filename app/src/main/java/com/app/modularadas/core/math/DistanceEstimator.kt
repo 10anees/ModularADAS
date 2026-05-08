@@ -1,40 +1,48 @@
 package com.app.modularadas.core.math
 
+import kotlin.math.atan
 import kotlin.math.tan
 
-// Handles monocular geometry calculations
+// Handles monocular geometry calculations using a pinhole approximation
 object DistanceEstimator {
 
     /**
-     * @param cameraHeightMeters Physical height of the device from the road.
-     * @param cameraPitchDegrees Downward/Upward tilt of the phone.
-     * @param verticalFovDegrees Device-specific vertical FOV.
-     * @param frameHeightPixels Total height of the camera frame.
-     * @param boxBottomY The Y coordinate of the bottom edge of the bounding box.
-     * @return Estimated distance in meters.
+     * Estimate distance using pinhole geometry.
+     *
+     * - Computes focal length in pixels from vertical FOV:
+     *   focal_px = (frameHeightPx / 2) / tan(vfov_rad / 2)
+     * - Angle to pixel = atan(deltaY / focal_px)
+     * - Total angle = cameraPitch + angleToPixel (radians)
+     * - distance = cameraHeight / tan(totalAngle)
      */
     fun estimateDistance(
         cameraHeightMeters: Float,
         cameraPitchDegrees: Float,
         verticalFovDegrees: Float,
         frameHeightPixels: Int,
-        boxBottomY: Float
+        boxBottomY: Float,
+        focalPxFromCalibration: Float = 0f
     ): Float {
-        // Calculate the angle of the pixel relative to the optical center
-        val centerPoint = frameHeightPixels / 2f
-        val deltaY = boxBottomY - centerPoint
-        
-        // Degrees per pixel approximation
-        val degreesPerPixel = verticalFovDegrees / frameHeightPixels
-        val pixelAngle = deltaY * degreesPerPixel
+        val centerY = frameHeightPixels / 2f
+        val deltaY = boxBottomY - centerY
 
-        // Total angle to the ground contact point
-        val totalAngle = Math.toRadians((cameraPitchDegrees + pixelAngle).toDouble())
+        // Prefer using a calibrated focal length in pixels when available
+        val focalPx = if (focalPxFromCalibration > 0f) {
+            focalPxFromCalibration.toDouble()
+        } else {
+            // Derive focal length in pixels from vertical FOV
+            val vfovRad = Math.toRadians(verticalFovDegrees.toDouble())
+            (frameHeightPixels / 2.0) / kotlin.math.tan(vfovRad / 2.0)
+        }
 
-        // Prevent division by zero or negative distances if bounding box is above horizon
-        if (totalAngle <= 0.0) return Float.MAX_VALUE
+        // Angle from optical center to pixel (radians)
+        val angleToPixel = atan(deltaY.toDouble() / focalPx)
 
-        // Basic trigonometry: Distance = Height / tan(theta)
-        return (cameraHeightMeters / tan(totalAngle)).toFloat()
+        // Total angle = camera pitch (convert to radians) + pixel angle
+        val totalAngleRad = Math.toRadians(cameraPitchDegrees.toDouble()) + angleToPixel
+
+        if (totalAngleRad <= 0.0) return Float.MAX_VALUE
+
+        return (cameraHeightMeters / tan(totalAngleRad)).toFloat()
     }
 }

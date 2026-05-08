@@ -18,6 +18,7 @@ fun AdasDashboardRoute(
     viewModel: AdasDashboardViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val calibrationConfirmation by viewModel.calibrationConfirmation.collectAsStateWithLifecycle()
 
     if (uiState.isSettingsVisible) {
         SettingsScreen(
@@ -26,7 +27,13 @@ fun AdasDashboardRoute(
             onTabSelected = viewModel::selectTab,
             onMetricVisibilityChange = viewModel::setMetricVisibility,
             onCalibrationChange = viewModel::updateCalibration,
-            onResetCalibration = viewModel::resetCalibrationToDefaults
+            onResetCalibration = viewModel::resetCalibrationToDefaults,
+            onCalibrateFromDetected = viewModel::calibrateFocalFromReference,
+            calibrationConfirmationMessage = calibrationConfirmation.message,
+            onConfirmCalibration = viewModel::confirmCalibration,
+            onDismissCalibrationDialog = viewModel::dismissCalibrationConfirmation,
+            isCalibrationDialogVisible = calibrationConfirmation.isVisible,
+            computedFocalPx = calibrationConfirmation.computedFocalPx
         )
     } else {
         MainCameraScreen(

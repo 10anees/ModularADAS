@@ -31,7 +31,8 @@ class ProcessFrameUseCase(
     suspend operator fun invoke(
         frame: Bitmap,
         extrinsics: CameraExtrinsics,
-        verticalFovDegrees: Float
+        verticalFovDegrees: Float,
+        focalPx: Float = 0f
     ): List<DetectionResult> = withContext(Dispatchers.Default) {
         Log.d(TAG, "[Pipeline] Starting frame processing: ${frame.width}x${frame.height}, FOV=$verticalFovDegrees°, height=${extrinsics.heightMeters}m, pitch=${extrinsics.pitchAngleDegrees}°")
         
@@ -51,7 +52,8 @@ class ProcessFrameUseCase(
                 cameraPitchDegrees = extrinsics.pitchAngleDegrees,
                 verticalFovDegrees = verticalFovDegrees,
                 frameHeightPixels = frame.height,
-                boxBottomY = raw.boundingBox.bottom
+                boxBottomY = raw.boundingBox.bottom,
+                focalPxFromCalibration = focalPx
             )
             Log.d(TAG, "[Pipeline] Distance calculation: label='${raw.label}' confidence=${raw.confidence} estimated_distance=${distance}m")
 

@@ -23,6 +23,8 @@ class SettingsRepository(private val context: Context) {
     private val cameraHeightKey = floatPreferencesKey("camera_height")
     private val cameraTiltKey = floatPreferencesKey("camera_tilt")
     private val focalLengthKey = floatPreferencesKey("focal_length")
+    private val focalPxKey = floatPreferencesKey("focal_px")
+    private val calibrationTimestampKey = floatPreferencesKey("calibration_timestamp")
     private val vehicleWidthKey = floatPreferencesKey("vehicle_width")
     private val referenceDistanceKey = floatPreferencesKey("reference_distance")
     private val warningDistanceKey = floatPreferencesKey("warning_distance")
@@ -55,10 +57,12 @@ class SettingsRepository(private val context: Context) {
                 cameraHeightMeters = preferences[cameraHeightKey] ?: 1.5f,
                 cameraTiltDegrees = preferences[cameraTiltKey] ?: 15f,
                 focalLengthMm = preferences[focalLengthKey] ?: 35f,
+                focalPx = preferences[focalPxKey] ?: 0f,
                 vehicleWidthMeters = preferences[vehicleWidthKey] ?: 1.9f,
                 referenceDistanceMeters = preferences[referenceDistanceKey] ?: 3f,
                 warningDistanceMeters = preferences[warningDistanceKey] ?: 8f,
-                criticalDistanceMeters = preferences[criticalDistanceKey] ?: 3f
+                criticalDistanceMeters = preferences[criticalDistanceKey] ?: 3f,
+                calibrationTimestampMs = preferences[calibrationTimestampKey]?.toLong() ?: 0L
             )
         }
     }
@@ -69,10 +73,12 @@ class SettingsRepository(private val context: Context) {
             preferences[cameraHeightKey] = calibration.cameraHeightMeters
             preferences[cameraTiltKey] = calibration.cameraTiltDegrees
             preferences[focalLengthKey] = calibration.focalLengthMm
+            preferences[focalPxKey] = calibration.focalPx
             preferences[vehicleWidthKey] = calibration.vehicleWidthMeters
             preferences[referenceDistanceKey] = calibration.referenceDistanceMeters
             preferences[warningDistanceKey] = calibration.warningDistanceMeters
             preferences[criticalDistanceKey] = calibration.criticalDistanceMeters
+            preferences[calibrationTimestampKey] = calibration.calibrationTimestampMs.toFloat()
         }
     }
 }

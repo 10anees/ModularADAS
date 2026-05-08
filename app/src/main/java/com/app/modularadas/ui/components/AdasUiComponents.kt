@@ -422,6 +422,15 @@ fun SummaryCard(
     calibration: CalibrationUiState,
     modifier: Modifier = Modifier
 ) {
+    val timestampText = if (calibration.calibrationTimestampMs > 0L) {
+        val date = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(
+            java.util.Date(calibration.calibrationTimestampMs)
+        )
+        "Calibrated at $date"
+    } else {
+        "Not calibrated"
+    }
+
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)),
@@ -429,11 +438,13 @@ fun SummaryCard(
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(text = "Calibration Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = timestampText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 SummaryValue(label = "Height", value = "${formatValue(calibration.cameraHeightMeters)}m")
                 SummaryValue(label = "Tilt", value = "${formatValue(calibration.cameraTiltDegrees)}°")
-                SummaryValue(label = "Focal", value = "${formatValue(calibration.focalLengthMm)}mm")
+                SummaryValue(label = "Focal", value = if (calibration.focalPx > 0f) "${formatValue(calibration.focalPx)}px" else "${formatValue(calibration.focalLengthMm)}mm")
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

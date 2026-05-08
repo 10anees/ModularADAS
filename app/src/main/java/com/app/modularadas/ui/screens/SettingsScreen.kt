@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -51,7 +52,14 @@ fun SettingsScreen(
     onTabSelected: (DashboardTab) -> Unit,
     onMetricVisibilityChange: (MetricVisibility) -> Unit,
     onCalibrationChange: ((CalibrationUiState) -> CalibrationUiState) -> Unit,
-    onResetCalibration: () -> Unit = {}
+    onResetCalibration: () -> Unit = {},
+    onCalibrateFromDetected: (Float) -> Unit = {},
+    calibrationConfirmationMessage: String = "",
+    onConfirmCalibration: (Float) -> Unit = {},
+    onDismissCalibrationDialog: () -> Unit = {},
+    calibrationTimestampMs: Long = 0L,
+    computedFocalPx: Float = 0f,
+    isCalibrationDialogVisible: Boolean = false
 ) {
     val context = LocalContext.current
 
@@ -152,8 +160,10 @@ fun SettingsScreen(
                         )
                         DashboardTab.Calibration -> CalibrationPane(
                             calibration = uiState.calibration,
+                            overlays = uiState.overlays,
                             onCalibrationChange = onCalibrationChange,
-                            onResetToDefaults = onResetCalibration
+                            onResetToDefaults = onResetCalibration,
+                            onCalibrateFromDetected = onCalibrateFromDetected
                         )
                         DashboardTab.Network -> NetworkPane()
                     }
@@ -162,5 +172,24 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Calibration Confirmation Dialog
+    if (isCalibrationDialogVisible && calibrationConfirmationMessage.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = onDismissCalibrationDialog,
+            title = { Text("Confirm Calibration") },
+            text = { Text(calibrationConfirmationMessage) },
+            confirmButton = {
+                TextButton(onClick = { onConfirmCalibration(computedFocalPx) }) {
+                    Text("Accept")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissCalibrationDialog) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

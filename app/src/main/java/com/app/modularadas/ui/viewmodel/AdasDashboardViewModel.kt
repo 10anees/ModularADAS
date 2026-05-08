@@ -31,6 +31,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * State for calibration confirmation dialog.
+ */
+data class CalibrationConfirmationState(
+    val isVisible: Boolean = false,
+    val message: String = "",
+    val computedFocalPx: Float = 0f
+)
+
 class AdasDashboardViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "AdasDashboardViewModel"
@@ -47,6 +56,9 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
 
     private val _uiState = MutableStateFlow(AdasDashboardUiState())
     val uiState: StateFlow<AdasDashboardUiState> = _uiState.asStateFlow()
+
+    private val _calibrationConfirmation = MutableStateFlow(CalibrationConfirmationState())
+    val calibrationConfirmation: StateFlow<CalibrationConfirmationState> = _calibrationConfirmation.asStateFlow()
 
     init {
         // Load persisted settings from DataStore
@@ -128,7 +140,8 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
                     val processedDetections = processFrameUseCase(
                         frame = frame,
                         extrinsics = currentCalibration.toExtrinsics(),
-                        verticalFovDegrees = verticalFovDegrees
+                        verticalFovDegrees = verticalFovDegrees,
+                        focalPx = currentCalibration.focalPx
                     )
                     val processingLatencyMs = (SystemClock.elapsedRealtime() - start).toInt()
                     
@@ -204,8 +217,12 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun buildWarnings(distanceMeters: Float, alertLevel: AlertLevel): List<WarningBannerUiState> {
+        val calib = _uiState.value.calibration
+        val warningThreshold = calib.warningDistanceMeters
+        val criticalThreshold = calib.criticalDistanceMeters
+
         return when {
-            alertLevel == AlertLevel.CRITICAL || distanceMeters <= AdasConfig.THRESHOLD_CRITICAL_METERS -> {
+            alertLevel == AlertLevel.CRITICAL || distanceMeters <= criticalThreshold -> {
                 listOf(
                     WarningBannerUiState(
                         title = "Warning!!!!",
@@ -214,7 +231,7 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
                     )
                 )
             }
-            distanceMeters <= AdasConfig.THRESHOLD_WARNING_METERS -> {
+            distanceMeters <= warningThreshold -> {
                 listOf(
                     WarningBannerUiState(
                         title = "Warning!",
@@ -237,5 +254,65 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
         detector.close()
         scope.cancel()
         super.onCleared()
+    }
+
+    /**
+     * Compute focal length in pixels from a measured pixel width of a reference object
+     * and the user-provided physical reference distance and vehicle width.
+     * Validates the computed focal_px and requests user confirmation if plausible.
+     * Formula: focal_px = (pW_px * referenceDistanceMeters) / vehicleWidthMeters
+     * Plausible range: 100-10000 pixels (typical focal lengths)
+     */
+    fun calibrateFocalFromReference(pixelWidthPx: Float) {
+        val calib = _uiState.value.calibration
+        if (pixelWidthPx <= 0f || calib.referenceDistanceMeters <= 0f || calib.vehicleWidthMeters <= 0f) {
+            Log.w(TAG, "[Calibration] Invalid inputs for focal calibration: pW=$pixelWidthPx, refDist=${calib.referenceDistanceMeters}, vehicleWidth=${calib.vehicleWidthMeters}")
+            return
+        }
+
+        val computedFocalPx = (pixelWidthPx * calib.referenceDistanceMeters) / calib.vehicleWidthMeters
+        Log.d(TAG, "[Calibration] Computed focalPx=$computedFocalPx from pW_px=$pixelWidthPx, refDist=${calib.referenceDistanceMeters}, vehicleWidth=${calib.vehicleWidthMeters}")
+
+        // Validate plausibility (typical focal lengths in pixels: 100-10000)
+        if (computedFocalPx < 50f || computedFocalPx > 15000f) {
+            val message = String.format(
+                java.util.Locale.US,
+                "Computed focal_px = %.0f px is outside typical range (50-15000 px).\n\nDetails:\n" +
+                "  Pixel Width: %.0f px\n" +
+                "  Reference Distance: %.1f m\n" +
+                "  Vehicle Width: %.1f m\n\n" +
+                "Accept this calibration?",
+                computedFocalPx, pixelWidthPx, calib.referenceDistanceMeters, calib.vehicleWidthMeters
+            )
+            Log.w(TAG, "[Calibration] Implausible focalPx value; requesting user confirmation")
+            _calibrationConfirmation.value = CalibrationConfirmationState(
+                isVisible = true,
+                message = message,
+                computedFocalPx = computedFocalPx
+            )
+        } else {
+            // Plausible value, persist directly
+            Log.d(TAG, "[Calibration] Focal_px is plausible, persisting directly")
+            confirmCalibration(computedFocalPx)
+        }
+    }
+
+    /**
+     * Confirm and persist the calibration with the computed focal_px.
+     */
+    fun confirmCalibration(focalPx: Float) {
+        val now = System.currentTimeMillis()
+        updateCalibration { current ->
+            current.copy(focalPx = focalPx, calibrationTimestampMs = now)
+        }
+        dismissCalibrationConfirmation()
+        Log.d(TAG, "[Calibration] Calibration confirmed and persisted. focalPx=$focalPx, timestamp=$now")
+    }
+
+    /**
+     * Dismiss the calibration confirmation dialog without persisting.
+     */
+    fun dismissCalibrationConfirmation() {
+        _calibrationConfirmation.value = CalibrationConfirmationState(isVisible = false)
     }
 }

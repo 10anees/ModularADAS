@@ -2,6 +2,11 @@ package com.app.modularadas.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -9,6 +14,7 @@ import com.app.modularadas.ui.components.CalibrationSliderRow
 import com.app.modularadas.ui.components.SettingsSectionTitle
 import com.app.modularadas.ui.components.SummaryCard
 import com.app.modularadas.ui.state.CalibrationUiState
+import com.app.modularadas.ui.state.DetectionOverlayUiState
 
 private fun formatValue(value: Float, maxDecimals: Int = 2): String {
     return String.format("%.${maxDecimals}f", value)
@@ -17,8 +23,10 @@ private fun formatValue(value: Float, maxDecimals: Int = 2): String {
 @Composable
 fun CalibrationPane(
     calibration: CalibrationUiState,
+    overlays: List<DetectionOverlayUiState> = emptyList(),
     onCalibrationChange: ((CalibrationUiState) -> CalibrationUiState) -> Unit,
-    onResetToDefaults: () -> Unit = {}
+    onResetToDefaults: () -> Unit = {},
+    onCalibrateFromDetected: (Float) -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SettingsSectionTitle(title = "Camera Parameters")
@@ -64,6 +72,40 @@ fun CalibrationPane(
             range = 1f..10f,
             onValueChange = { value -> onCalibrationChange { it.copy(referenceDistanceMeters = value) } }
         )
+
+        // Calibrate from detected object button
+        if (overlays.isNotEmpty()) {
+            SettingsSectionTitle(title = "Auto-Calibration")
+            val largestOverlay = overlays.maxByOrNull { overlay ->
+                (overlay.normalizedBox.right - overlay.normalizedBox.left)
+            }
+            val pixelWidth = largestOverlay?.let { overlay ->
+                // Assuming frame width of 1080 as typical (can be parameterized if needed)
+                (overlay.normalizedBox.right - overlay.normalizedBox.left) * 1080f
+            } ?: 0f
+
+            Button(
+                onClick = {
+                    if (pixelWidth > 0f) {
+                        onCalibrateFromDetected(pixelWidth)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = pixelWidth > 0f,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+            ) {
+                Text(
+                    text = if (pixelWidth > 0f) {
+                        String.format("Calibrate from Detected Object (%.0f px)", pixelWidth)
+                    } else {
+                        "Calibrate from Detected Object (no detections)"
+                    }
+                )
+            }
+        }
 
         SettingsSectionTitle(title = "Warning Thresholds")
         CalibrationSliderRow(

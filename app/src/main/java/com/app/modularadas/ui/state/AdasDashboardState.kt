@@ -24,10 +24,12 @@ data class CalibrationUiState(
     val cameraHeightMeters: Float = 1.5f,
     val cameraTiltDegrees: Float = 15f,
     val focalLengthMm: Float = 35f,
+    val focalPx: Float = 0f,
     val vehicleWidthMeters: Float = 1.9f,
     val referenceDistanceMeters: Float = 3f,
     val warningDistanceMeters: Float = 8f,
-    val criticalDistanceMeters: Float = 3f
+    val criticalDistanceMeters: Float = 3f,
+    val calibrationTimestampMs: Long = 0L
 ) {
     fun toExtrinsics(): CameraExtrinsics = CameraExtrinsics(
         heightMeters = cameraHeightMeters,
