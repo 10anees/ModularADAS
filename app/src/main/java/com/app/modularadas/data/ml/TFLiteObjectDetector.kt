@@ -2,7 +2,6 @@ package com.app.modularadas.data.ml
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.RectF
 import android.util.Log
 import com.app.modularadas.domain.repository.ObjectDetector
 import com.app.modularadas.domain.repository.RawDetection
@@ -20,7 +19,7 @@ import org.tensorflow.lite.task.vision.detector.ObjectDetector.ObjectDetectorOpt
  */
 class TFLiteObjectDetector(
     private val context: Context,
-    private val modelPath: String = "yolov10n_float16.tflite" 
+    private val modelPath: String = "efficientdet_lite0.tflite" 
 ) : ObjectDetector {
     companion object {
         private const val TAG = "TFLiteDetector"
@@ -36,45 +35,72 @@ class TFLiteObjectDetector(
         setupDetector()
     }
 
-    private fun setupDetector() {
-        Log.d(TAG, "[Detector Setup] Initializing TFLite Object Detector...")
+    private fun buildOptions(useGpu: Boolean): ObjectDetectorOptions {
         val optionsBuilder = ObjectDetectorOptions.builder()
             .setMaxResults(10)
-            .setScoreThreshold(0.4f) // Filter out low-confidence noise immediately
+            .setScoreThreshold(0.4f)
 
         val baseOptionsBuilder = BaseOptions.builder()
-
-        // Safety check: Ensure the device's GPU supports the necessary OpenCL/OpenGL 
-        gpuDelegateEnabled = CompatibilityList().isDelegateSupportedOnThisDevice
-        if (gpuDelegateEnabled) {
-            Log.d(TAG, "[Detector Setup] GPU delegate ENABLED on this device")
+        if (useGpu) {
             baseOptionsBuilder.useGpu()
         } else {
-            // Fallback to NNAPI or multi-threading if GPU delegate fails
-            Log.d(TAG, "[Detector Setup] GPU delegate NOT supported, using 4 threads instead")
             baseOptionsBuilder.setNumThreads(4)
         }
-
         optionsBuilder.setBaseOptions(baseOptionsBuilder.build())
+        return optionsBuilder.build()
+    }
+
+    private fun modelAssetExists(path: String): Boolean {
+        return try {
+            context.assets.open(path).use { input ->
+                Log.d(TAG, "[Detector Setup] Model asset '$path' found, size=${input.available()} bytes")
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "[Detector Setup] Model asset '$path' not found/readable", e)
+            false
+        }
+    }
+
+    private fun setupDetector() {
+        Log.d(TAG, "[Detector Setup] Initializing TFLite Object Detector...")
+        if (!modelAssetExists(modelPath)) {
+            detector = null
+            return
+        }
+
+        val gpuSupported = CompatibilityList().isDelegateSupportedOnThisDevice
+        gpuDelegateEnabled = gpuSupported
+
+        // Try GPU first when supported, then hard-fallback to CPU/threads.
+        if (gpuSupported) {
+            try {
+                Log.d(TAG, "[Detector Setup] Attempting GPU delegate initialization")
+                detector = TFLiteDetector.createFromFileAndOptions(context, modelPath, buildOptions(useGpu = true))
+                Log.d(TAG, "[Detector Setup] SUCCESS: Detector initialized with GPU. Model: $modelPath")
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "[Detector Setup] GPU init failed, falling back to CPU threads", e)
+                detector = null
+            }
+        } else {
+            Log.d(TAG, "[Detector Setup] GPU delegate not supported, using CPU threads")
+        }
 
         try {
-            detector = TFLiteDetector.createFromFileAndOptions(context, modelPath, optionsBuilder.build())
-            Log.d(TAG, "[Detector Setup] SUCCESS: Detector initialized. Model: $modelPath")
+            gpuDelegateEnabled = false
+            detector = TFLiteDetector.createFromFileAndOptions(context, modelPath, buildOptions(useGpu = false))
+            Log.d(TAG, "[Detector Setup] SUCCESS: Detector initialized with CPU threads. Model: $modelPath")
         } catch (e: Exception) {
-            Log.e(TAG, "[Detector Setup] FAILED: Could not load model at $modelPath", e)
-            e.printStackTrace()
+            detector = null
+            Log.e(TAG, "[Detector Setup] FAILED: Could not initialize detector on GPU or CPU for model $modelPath", e)
         }
     }
 
     override suspend fun detect(frame: Bitmap): List<RawDetection> = withContext(Dispatchers.Default) {
-        // ============ GUARD CHECK 1: Detector readiness ============
         val currentDetector = detector
         if (currentDetector == null) {
             Log.w(TAG, "[Guard Check] Detector not initialized (null). Returning empty detections.")
-            return@withContext emptyList()
-        }
-        if (!isReady) {
-            Log.w(TAG, "[Guard Check] Detector reports not ready (!isReady). Returning empty detections.")
             return@withContext emptyList()
         }
         Log.d(TAG, "[Detect] Detector is ready (GPU=$gpuDelegateEnabled). Processing frame: ${frame.width}x${frame.height}")
