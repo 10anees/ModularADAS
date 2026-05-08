@@ -1,5 +1,7 @@
 package com.app.modularadas.ui.components
 
+import android.graphics.Paint
+import android.graphics.RectF as AndroidRectF
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -58,8 +60,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -202,12 +207,42 @@ fun DetectionOverlayCanvas(
     modifier: Modifier = Modifier
 ) {
     val overlayColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+    val density = LocalDensity.current
+    val textSizePx = with(density) { 11.sp.toPx() }
+    val horizontalPadPx = with(density) { 6.dp.toPx() }
+    val verticalPadPx = with(density) { 4.dp.toPx() }
+    val badgeGapPx = with(density) { 4.dp.toPx() }
+    val textYOffsetPx = with(density) { 2.dp.toPx() }
+    val textPaint = remember(textSizePx) {
+        Paint().apply {
+            color = Color.White.toArgb()
+            textSize = textSizePx
+            isAntiAlias = true
+            isFakeBoldText = true
+        }
+    }
+    val badgePaint = remember(overlayColor) {
+        Paint().apply {
+            color = overlayColor.toArgb()
+            isAntiAlias = true
+        }
+    }
+
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
             val left = detection.normalizedBox.left * size.width
             val top = detection.normalizedBox.top * size.height
             val width = (detection.normalizedBox.right - detection.normalizedBox.left) * size.width
             val height = (detection.normalizedBox.bottom - detection.normalizedBox.top) * size.height
+            val confidencePct = (detection.confidence * 100f).roundToInt()
+            val distanceText = String.format(java.util.Locale.US, "%.1fm", detection.distanceMeters)
+            val labelText = "${detection.label} ${confidencePct}% ${distanceText}"
+            val badgeWidth = textPaint.measureText(labelText) + (horizontalPadPx * 2f)
+            val badgeHeight = textSizePx + (verticalPadPx * 2f)
+            val maxBadgeLeft = (size.width - badgeWidth).coerceAtLeast(0f)
+            val badgeLeft = left.coerceIn(0f, maxBadgeLeft)
+            val badgeTop = (top - badgeHeight - badgeGapPx).coerceAtLeast(0f)
+
             drawRoundRect(
                 color = overlayColor,
                 topLeft = Offset(left, top),
@@ -216,6 +251,25 @@ fun DetectionOverlayCanvas(
                     width = 2.2f,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f), 0f)
                 )
+            )
+
+            val nativeCanvas = drawContext.canvas.nativeCanvas
+            nativeCanvas.drawRoundRect(
+                AndroidRectF(
+                    badgeLeft,
+                    badgeTop,
+                    badgeLeft + badgeWidth,
+                    badgeTop + badgeHeight
+                ),
+                8f,
+                8f,
+                badgePaint
+            )
+            nativeCanvas.drawText(
+                labelText,
+                badgeLeft + horizontalPadPx,
+                badgeTop + badgeHeight - verticalPadPx - textYOffsetPx,
+                textPaint
             )
         }
     }

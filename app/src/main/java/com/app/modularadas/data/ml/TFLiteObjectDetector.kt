@@ -135,11 +135,11 @@ class TFLiteObjectDetector(
             }
             
             // Only care about vehicular or pedestrian obstacles for Phase rear-collision
-            val allowedLabels = listOf("car", "truck", "bus", "motorcycle", "person")
-            if (category.label !in allowedLabels) {
-                Log.d(TAG, "[Filter] Skipping label '${category.label}' (not in allowed list: $allowedLabels)")
-                return@mapNotNull null
-            }
+            // val allowedLabels = listOf("car", "truck", "bus", "motorcycle", "person")
+            // if (category.label !in allowedLabels) {
+            //     Log.d(TAG, "[Filter] Skipping label '${category.label}' (not in allowed list: $allowedLabels)")
+            //     return@mapNotNull null
+            // }
 
             Log.d(TAG, "[Filter] Accepted detection: label='${category.label}' confidence=${category.score}")
             RawDetection(

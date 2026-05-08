@@ -163,7 +163,8 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
                     Log.d(TAG, "[frameProcessing] Created overlay objects: count=${overlays.size}")
 
                     _uiState.update { current ->
-                        val distanceMeters = nearestDistance ?: current.distanceMeters
+                        val hasDetections = processedDetections.isNotEmpty()
+                        val distanceMeters = nearestDistance ?: 0f
                         val speedKmh = if (nearestDistance != null) {
                             val previousDistance = current.distanceMeters.takeIf { it > 0f }
                             if (previousDistance != null && processingLatencyMs > 0) {
@@ -182,7 +183,11 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
                             latencyMs = processingLatencyMs,
                             alertLevel = alertLevel,
                             overlays = overlays,
-                            warningBanners = buildWarnings(distanceMeters, alertLevel)
+                            warningBanners = if (hasDetections) {
+                                buildWarnings(distanceMeters, alertLevel)
+                            } else {
+                                emptyList()
+                            }
                         )
                     }
                 } catch (e: Exception) {
