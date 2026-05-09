@@ -8,6 +8,7 @@ import androidx.camera.view.PreviewView
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LifecycleOwner
 import com.app.modularadas.core.constants.AdasConfig
+import com.app.modularadas.core.audio.SoundManager
 import com.app.modularadas.data.camera.CameraController
 import com.app.modularadas.data.ml.TFLiteObjectDetector
 import com.app.modularadas.data.settings.SettingsRepository
@@ -25,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,10 +51,13 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
     private val processFrameUseCase = ProcessFrameUseCase(detector)
     private val evaluateAlertUseCase = EvaluateAlertUseCase()
     private val settingsRepository = SettingsRepository(application.applicationContext)
+    private val soundManager = SoundManager(application.applicationContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var processingJob: Job? = null
     private var overlayIdSeed: Long = 0L
+    private var previousWarningsCount: Int = 0
+    private var beepScheduleJob: Job? = null
 
     private val _uiState = MutableStateFlow(AdasDashboardUiState())
     val uiState: StateFlow<AdasDashboardUiState> = _uiState.asStateFlow()
@@ -156,7 +161,12 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
                     }
                     
                     val nearestDistance = processedDetections.minOfOrNull { it.estimatedDistanceMeters }
-                    val alertLevel = evaluateAlertUseCase(processedDetections)
+                    val calibration = _uiState.value.calibration
+                    val alertLevel = evaluateAlertUseCase(
+                        processedDetections,
+                        warningThresholdMeters = calibration.warningDistanceMeters,
+                        criticalThresholdMeters = calibration.criticalDistanceMeters
+                    )
                     Log.d(TAG, "[frameProcessing] Alert level: $alertLevel, nearest distance: $nearestDistance m")
                     
                     val overlays = processedDetections.map { detection ->
@@ -221,7 +231,7 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
         val warningThreshold = calib.warningDistanceMeters
         val criticalThreshold = calib.criticalDistanceMeters
 
-        return when {
+        val warnings = when {
             alertLevel == AlertLevel.CRITICAL || distanceMeters <= criticalThreshold -> {
                 listOf(
                     WarningBannerUiState(
@@ -242,6 +252,47 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
             }
             else -> emptyList()
         }
+        
+        // Trigger beeping if warnings appeared or changed
+        if (warnings.isNotEmpty() && previousWarningsCount == 0) {
+            // Warning just appeared
+            scheduleBeep(warnings[0].critical)
+        } else if (warnings.isEmpty() && previousWarningsCount > 0) {
+            // Warning cleared
+            beepScheduleJob?.cancel()
+            beepScheduleJob = null
+        }
+        previousWarningsCount = warnings.size
+        
+        return warnings
+    }
+
+    private fun scheduleBeep(isCritical: Boolean) {
+        Log.d(TAG, "[scheduleBeep] Scheduling ${if (isCritical) "fast" else "slow"} beep")
+        beepScheduleJob?.cancel()
+        beepScheduleJob = scope.launch {
+            try {
+                val delayMs = if (isCritical) {
+                    Log.d(TAG, "[scheduleBeep] CRITICAL warning detected")
+                    2500L  // 2.5 seconds for red/critical warnings
+                } else {
+                    Log.d(TAG, "[scheduleBeep] CAUTION warning detected")
+                    5000L  // 5 seconds for orange/caution warnings
+                }
+                Log.d(TAG, "[scheduleBeep] Waiting ${delayMs}ms before playing beep")
+                delay(delayMs)
+                if (isCritical) {
+                    Log.d(TAG, "[scheduleBeep] Playing fast beep (1200Hz)")
+                    soundManager.playFastBeep()
+                } else {
+                    Log.d(TAG, "[scheduleBeep] Playing slow beep (800Hz)")
+                    soundManager.playSlowBeep()
+                }
+                Log.d(TAG, "[scheduleBeep] Beep played after ${delayMs}ms")
+            } catch (e: Exception) {
+                Log.e(TAG, "[scheduleBeep] Error scheduling beep", e)
+            }
+        }
     }
 
     private fun Float.roundDisplay(): String {
@@ -252,6 +303,8 @@ class AdasDashboardViewModel(application: Application) : AndroidViewModel(applic
     override fun onCleared() {
         stopCamera()
         detector.close()
+        soundManager.release()
+        beepScheduleJob?.cancel()
         scope.cancel()
         super.onCleared()
     }
