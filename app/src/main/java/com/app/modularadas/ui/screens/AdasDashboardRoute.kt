@@ -40,7 +40,12 @@ fun AdasDashboardRoute(
             uiState = uiState,
             onSettingsClick = viewModel::openSettings,
             onPreviewReady = viewModel::startCamera,
-            onPreviewClosed = viewModel::stopCamera
+            onPreviewClosed = viewModel::stopCamera,
+            onMainCalibrateClick = { pixelWidthPx, referenceDistanceMeters ->
+                // persist provided reference distance then run calibration
+                viewModel.updateCalibration { it.copy(referenceDistanceMeters = referenceDistanceMeters) }
+                viewModel.calibrateFocalFromReference(pixelWidthPx)
+            }
         )
     }
 }

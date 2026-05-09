@@ -79,6 +79,7 @@ fun CalibrationPane(
             val largestOverlay = overlays.maxByOrNull { overlay ->
                 (overlay.normalizedBox.right - overlay.normalizedBox.left)
             }
+            val detectedLabel = largestOverlay?.label ?: "object"
             val pixelWidth = largestOverlay?.let { overlay ->
                 // Assuming frame width of 1080 as typical (can be parameterized if needed)
                 (overlay.normalizedBox.right - overlay.normalizedBox.left) * 1080f
@@ -99,7 +100,7 @@ fun CalibrationPane(
             ) {
                 Text(
                     text = if (pixelWidth > 0f) {
-                        String.format("Calibrate from Detected Object (%.0f px)", pixelWidth)
+                        String.format("Calibrate from Detected Object — %s (%.0f px)", detectedLabel, pixelWidth)
                     } else {
                         "Calibrate from Detected Object (no detections)"
                     }

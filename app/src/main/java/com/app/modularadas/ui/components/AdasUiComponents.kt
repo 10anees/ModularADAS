@@ -47,6 +47,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -156,6 +160,28 @@ fun SettingsFloatingButton(
             Icon(
                 imageVector = Icons.Filled.Settings,
                 contentDescription = "Settings",
+                tint = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+fun CalibrateFloatingButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondary,
+        modifier = modifier.size(44.dp),
+        shadowElevation = 6.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.LensBlur,
+                contentDescription = "Calibrate",
                 tint = Color.White
             )
         }
@@ -389,17 +415,38 @@ fun CalibrationSliderRow(
         shape = RoundedCornerShape(22.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            val focusManager = LocalFocusManager.current
+            // editable numeric field for keyboard input
+            var textValue by remember(value) { mutableStateOf(formatValue(value)) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                AssistChip(onClick = {}, label = { Text(valueLabel) })
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { newText ->
+                        // allow only numbers, dot and leading minus ignored
+                        textValue = newText
+                        val parsed = newText.toFloatOrNull()
+                        if (parsed != null) {
+                            val clamped = parsed.coerceIn(range.start, range.endInclusive)
+                            onValueChange(clamped)
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.width(110.dp),
+                    label = { Text("Value") },
+                    // default keyboard behavior (numeric input will be parsed)
+                )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Slider(
                 value = value,
-                onValueChange = onValueChange,
+                onValueChange = { v ->
+                    onValueChange(v)
+                    textValue = formatValue(v)
+                },
                 valueRange = range.start..range.endInclusive
             )
         }

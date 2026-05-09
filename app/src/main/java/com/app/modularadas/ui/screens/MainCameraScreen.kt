@@ -38,8 +38,18 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.LifecycleOwner
 import android.content.pm.ActivityInfo
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.height
 import kotlinx.coroutines.delay
 import com.app.modularadas.ui.components.DetectionOverlayCanvas
+import com.app.modularadas.ui.components.CalibrateFloatingButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.ui.platform.LocalFocusManager
 import com.app.modularadas.ui.components.LiveMetricRail
 import com.app.modularadas.ui.components.SettingsFloatingButton
 import com.app.modularadas.ui.components.WarningBanner
@@ -56,13 +66,17 @@ fun MainCameraScreen(
     uiState: AdasDashboardUiState,
     onSettingsClick: () -> Unit,
     onPreviewReady: (LifecycleOwner, PreviewView) -> Unit,
-    onPreviewClosed: () -> Unit
+    onPreviewClosed: () -> Unit,
+    onMainCalibrateClick: (Float, Float) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var chromeVisible by rememberSaveable { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
+    // Dialog state for calibrate-from-detected flow
+    var showCalibrateDialog by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     DisposableEffect(Unit) {
         val activity = context.findActivity()
@@ -163,9 +177,15 @@ fun MainCameraScreen(
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
-                    SettingsFloatingButton(
-                        onClick = onSettingsClick
-                    )
+                    Row {
+                        CalibrateFloatingButton(
+                            onClick = { showCalibrateDialog = true },
+                            modifier = Modifier.padding(end = 10.dp)
+                        )
+                        SettingsFloatingButton(
+                            onClick = onSettingsClick
+                        )
+                    }
                 }
 
                 Column(
@@ -183,5 +203,69 @@ fun MainCameraScreen(
                 }
             }
         }
+    }
+    if (showCalibrateDialog) {
+        // compute largest overlay pixel width using same heuristic
+        val largestOverlay =
+            uiState.overlays.maxByOrNull { it.normalizedBox.right - it.normalizedBox.left }
+        val pixelWidth =
+            largestOverlay?.let { overlay -> (overlay.normalizedBox.right - overlay.normalizedBox.left) * 1080f }
+                ?: 0f
+
+        var refDistance by remember {
+            mutableStateOf(
+                uiState.calibration.referenceDistanceMeters.coerceAtLeast(
+                    1f
+                )
+            )
+        }
+
+        AlertDialog(
+            onDismissRequest = { showCalibrateDialog = false },
+            title = { Text(text = "Calibrate from Detected Object") },
+            text = {
+                Column {
+                    if (pixelWidth <= 0f) {
+                        Text(text = "No detections available to calibrate from.")
+                    } else {
+                        Text(
+                            text = "Detected object: ${largestOverlay?.label ?: "object"} — ${
+                                String.format(
+                                    java.util.Locale.US,
+                                    "%.0f px",
+                                    pixelWidth
+                                )
+                            }"
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = refDistance.toString(),
+                            onValueChange = { v -> v.toFloatOrNull()?.let { refDistance = it.coerceIn(1f, 100f) } ?: Unit },
+                            label = { Text("Reference distance (m)") },
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Slider(
+                            value = refDistance,
+                            onValueChange = { refDistance = it },
+                            valueRange = 1f..50f
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (pixelWidth > 0f) {
+                        onMainCalibrateClick(pixelWidth, refDistance)
+                    }
+                    showCalibrateDialog = false
+                }, enabled = pixelWidth > 0f) { Text("Calibrate") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCalibrateDialog = false
+                }) { Text("Cancel") }
+            }
+        )
     }
 }
